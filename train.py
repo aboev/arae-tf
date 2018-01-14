@@ -5,43 +5,63 @@ import time
 import numpy as np
 from layers import MLP_D, MLP_G, Seq2SeqLayer, LeakyReluActivation, LinearLayer, NormalInitializer, RandomUniformInitializer
 import random
+import argparse
 
-HOME_PATH = '/home/alex/workbooks/ipython/arae-test/'
+parser = argparse.ArgumentParser(description='Tensorflow ARAE for Text')
+
+# Path Arguments
+parser.add_argument('--data_path', type=str, required=True, help='location of the data corpus')
+parser.add_argument('--outf', type=str, default='example', help='output directory name')
+
+# Data Processing Arguments
+parser.add_argument('--vocab_size', type=int, default=11000, help='cut vocabulary down to this size (most frequently seen words in train)')
+parser.add_argument('--maxlen', type=int, default=30, help='maximum sentence length')
+parser.add_argument('--lowercase', action='store_true', help='lowercase all text')
+
+# Model Arguments
+parser.add_argument('--emsize', type=int, default=300, help='size of word embeddings')
+parser.add_argument('--nhidden', type=int, default=300, help='number of hidden units per layer')
+parser.add_argument('--nlayers', type=int, default=1, help='number of layers')
+parser.add_argument('--noise_radius', type=float, default=0.2, help='stdev of noise for autoencoder (regularizer)')
+parser.add_argument('--noise_anneal', type=float, default=0.995, help='anneal noise_radius exponentially by this every 100 iterations')
+parser.add_argument('--hidden_init', action='store_true', help="initialize decoder hidden state with encoder's")
+parser.add_argument('--arch_g', type=str, default='300-300', help='generator architecture (MLP)')
+parser.add_argument('--arch_d', type=str, default='300-300', help='critic/discriminator architecture (MLP)')
+parser.add_argument('--z_size', type=int, default=100, help='dimension of random noise z to feed into generator')
+parser.add_argument('--temp', type=float, default=1, help='softmax temperature (lower --> more discrete)')
+parser.add_argument('--enc_grad_norm', type=bool, default=True, help='norm code gradient from critic->encoder')
+parser.add_argument('--gan_toenc', type=float, default=-0.01, help='weight factor passing gradient from gan to encoder')
+parser.add_argument('--dropout', type=float, default=0.0, help='dropout applied to layers (0 = no dropout)')
+
+# Training Arguments
+parser.add_argument('--epochs', type=int, default=15, help='maximum number of epochs')
+parser.add_argument('--min_epochs', type=int, default=6, help="minimum number of epochs to train for")
+parser.add_argument('--patience', type=int, default=5, help="number of language model evaluations without ppl improvement to wait before early stopping")
+parser.add_argument('--batch_size', type=int, default=64, metavar='N', help='batch size')
+parser.add_argument('--niters_ae', type=int, default=1, help='number of autoencoder iterations in training')
+parser.add_argument('--niters_gan_d', type=int, default=5, help='number of discriminator iterations in training')
+parser.add_argument('--niters_gan_g', type=int, default=1, help='number of generator iterations in training')
+parser.add_argument('--niters_gan_schedule', type=str, default='2-4-6', help='epoch counts to increase number of GAN training iterations (increment by 1 each time)')
+parser.add_argument('--lr_ae', type=float, default=1, help='autoencoder learning rate')
+parser.add_argument('--lr_gan_g', type=float, default=5e-05, help='generator learning rate')
+parser.add_argument('--lr_gan_d', type=float, default=1e-05, help='critic/discriminator learning rate')
+parser.add_argument('--beta1', type=float, default=0.9, help='beta1 for adam. default=0.9')
+parser.add_argument('--clip', type=float, default=1, help='gradient clipping, max norm')
+parser.add_argument('--gan_clamp', type=float, default=0.01, help='WGAN clamp')
+
+# Evaluation Arguments
+parser.add_argument('--sample', action='store_true', help='sample when decoding for generation')
+parser.add_argument('--N', type=int, default=5, help='N-gram order for training n-gram language model')
+parser.add_argument('--log_interval', type=int, default=200, help='interval to log autoencoder training results')
+
+# Other
+parser.add_argument('--seed', type=int, default=1111, help='random seed')
+
+args = parser.parse_args()
+
 scope_autoencoder = 'autoencoder'
 scope_critic = 'critic'
 scope_generator = 'generator'
-class Args:
-    batch_size = 64
-    temp = 1
-    clip = 1
-    log_interval = 200
-    z_size = 100
-    epochs = 15
-    vocab_size = 11000
-    maxlen = 30
-    data_path = HOME_PATH + 'data/'
-    emsize = 300
-    nhidden = 300
-    nlayers = 1
-    noise_radius = 0.2
-    noise_anneal = 0.995
-    hidden_init = True
-    dropout = 0.0
-    niters_ae = 1
-    lr_ae = 1.0
-    log_interval = 50
-    
-    gan_clamp = 0.01
-    niters_gan_d = 5
-    niters_gan_g = 1
-    gan_toenc = -0.01
-    lr_gan_g = 5e-05
-    lr_gan_d = 1e-05
-    beta1 = 0.9
-    arch_d = '300-300'
-    arch_g = '300-300'
-    niters_gan_schedule = '2-4-6'
-args = Args()
 
 corpus = Corpus(args.data_path, maxlen=args.maxlen, vocab_size=args.vocab_size, lowercase=True)
 

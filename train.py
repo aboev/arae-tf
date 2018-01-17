@@ -3,7 +3,7 @@ from utils import Corpus, batchify, get_string
 from utils_debug import sentence_to_batch, get_string
 import time
 import numpy as np
-from layers import MLP_D, MLP_G, Seq2SeqLayer, LeakyReluActivation, LinearLayer, NormalInitializer, RandomUniformInitializer
+from layers import MLP_D, MLP_G, Seq2SeqLayer, LeakyReluActivation, LinearLayer, NormalInitializer, RandomUniformInitializer, cost
 import random
 import argparse
 
@@ -72,17 +72,6 @@ args.ntokens = ntokens
 test_data = batchify(corpus.test, args.batch_size, args.maxlen, shuffle=False)
 train_data = batchify(corpus.train, args.batch_size, args.maxlen, shuffle=False)
 
-def cost(output, target):
-  # Compute cross entropy for each frame.
-  cross_entropy = target * tf.log(tf.nn.softmax(output))
-  cross_entropy = -tf.reduce_sum(cross_entropy, 2)
-  mask = tf.sign(tf.reduce_max(tf.abs(target), 2))
-  cross_entropy *= mask
-  # Average over actual sequence lengths.
-  cross_entropy = tf.reduce_sum(cross_entropy, 1)
-  cross_entropy /= tf.reduce_sum(mask, 1)
-  return tf.reduce_mean(cross_entropy)
-
 tf.reset_default_graph()
 
 # Build graph
@@ -102,34 +91,18 @@ hidden_input = tf.placeholder(tf.float32, [None, args.nhidden], name = 'hidden_i
 is_train = tf.placeholder(tf.bool, name='is_train')
 
 # Create sentence length mask over padding
-mask = tf.greater(target, 0)
-masked_target = tf.boolean_mask(target, mask)
+output = autoencoder(source, lengths, noise=True) # batch_size x maxLen x nHidden
 
-# examples x ntokens
-output_mask = tf.tile(tf.expand_dims(mask, 1), [tf.shape(mask)[0], ntokens, 1])
+output_logits = output / args.temp # output: batch_size x maxLen x ntokens
 
-# output: batch_size x maxLen x nHidden
-#output = autoencoder(source, lengths, noise=True)
-output = autoencoder(source, lengths, noise=True)
-#output_test = autoencoder(source, lengths, noise=False, reuse=True)
-
-
-# output: batch_size x maxLen x ntokens
-#output_logits = tf.contrib.layers.fully_connected(output, ntokens, activation_fn=None) / args.temp
-output_logits = output / args.temp
-#output_logits_test = tf.contrib.layers.fully_connected(output_test, ntokens, activation_fn=None) / args.temp
-# output: batch_size x maxLen
-output_predictions = tf.argmax(output_logits, 2)
+output_predictions = tf.argmax(output_logits, 2) # output: batch_size x maxLen
 
 # Loss/Accuracy for AE
 loss = cost(output_logits, tf.one_hot(target, depth=args.ntokens, dtype=tf.float32))
-#stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(target, depth=args.ntokens, dtype=tf.float32), logits=output_logits)
-#loss = tf.reduce_mean(stepwise_cross_entropy)
-pred_idx = tf.argmax(output_logits, 2)
-#pred_idx_test = tf.argmax(output_logits_test, 2)
-mask = tf.logical_not(tf.equal(pred_idx, tf.constant(0, dtype = tf.int64)))
 
-accuracy = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(pred_idx, target), mask), tf.float32), 1)
+mask = tf.logical_not(tf.equal(output_predictions, tf.constant(0, dtype = tf.int64)))
+
+accuracy = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(output_predictions, target), mask), tf.float32), 1)
 accuracy /= tf.cast(lengths, tf.float32)
 accuracy = tf.reduce_mean(accuracy)
 
@@ -157,7 +130,6 @@ for p in gan_disc_params:
     tf.clip_by_value(p, -args.gan_clamp, args.gan_clamp)
 
 real_hidden = autoencoder(source, lengths, noise=False, encode_only=True, reuse = True)
-#real_hidden_noise = autoencoder(source, lengths, noise=True, encode_only=True, reuse = True)
 
 with tf.get_default_graph().gradient_override_map({"Identity": "CustomGradOne"}):
     err_D_real = gan_disc(real_hidden, reduce_mean = True)
@@ -170,6 +142,7 @@ for p in autoencoder_params:
     tf.clip_by_value(p, -args.clip, args.clip)
 
 # Optimization
+
 t_vars = tf.trainable_variables()
 g_vars = [var for var in t_vars if scope_generator in var.name]
 d_vars = [var for var in t_vars if scope_critic in var.name]
@@ -228,7 +201,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         # loop through all batches in training data
         while niter < len(train_data):
             for i in range(args.niters_ae):
-                saver.save(sess, '/data/tf-models/arae/arae-tf-120118-iter', global_step=i)
+                #saver.save(sess, '/data/tf-models/arae/arae-tf-120118-iter', global_step=i)
                 
                 if niter == len(train_data):
                     break  # end of epoch

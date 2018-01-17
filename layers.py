@@ -216,3 +216,14 @@ class Seq2SeqLayer(object):
         max_indices = tf.concat(all_indices, 1)
 
         return max_indices
+
+def cost(output, target):
+  # Compute cross entropy for each frame.
+  cross_entropy = target * tf.log(tf.nn.softmax(output))
+  cross_entropy = -tf.reduce_sum(cross_entropy, 2)
+  mask = tf.sign(tf.reduce_max(tf.abs(target), 2))
+  cross_entropy *= mask
+  # Average over actual sequence lengths.
+  cross_entropy = tf.reduce_sum(cross_entropy, 1)
+  cross_entropy /= tf.reduce_sum(mask, 1)
+  return tf.reduce_mean(cross_entropy)

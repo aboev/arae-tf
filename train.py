@@ -234,7 +234,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                 
                 print('[%d/%d][%d/%d] Loss_D: %.8f (Loss_D_real: %.8f Loss_D_fake: %.8f) Loss_G: %.8f' % (epoch, args.epochs, niter, len(train_data), err_D_fake_val - err_D_real_val, err_D_real_val, err_D_fake_val, G_loss_val))
                 
-                if niter_global % 3000 == 0:
+                if niter_global % 300 == 0:
                     source_batch, target_batch, lengths_batch = train_data[random.randint(0, len(train_data)-1)]
                     max_ind = sess.run([max_indices], {source: source_batch, target: target_batch, lengths: lengths_batch, is_train: True})
                     print('Evaluating generator: %s' % get_string(max_ind[0], corpus))

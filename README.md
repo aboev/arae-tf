@@ -7,7 +7,7 @@ Code for the paper [Adversarially Regularized Autoencoders for Generating Discre
  - Based on auto-regressive LSTM (tf.nn.dynamic_rnn)
 
 ### Usage example
-`python train.py --data_path=data/`
+`python train.py --data_path=data_snli/`
 
 ### Sentence Generations (After 1 epoch)
 ```

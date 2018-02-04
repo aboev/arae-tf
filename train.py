@@ -175,8 +175,6 @@ writer.flush()
 
 saver = tf.train.Saver()
 
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.66)
-
 if args.niters_gan_schedule != "":
     gan_schedule = [int(x) for x in args.niters_gan_schedule.split("-")]
 else:
@@ -184,7 +182,7 @@ else:
 niter_gan = 1
 
 init = tf.global_variables_initializer()
-with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+with tf.Session() as sess:
     init.run()
     
     for epoch in range(1, args.epochs+1):
